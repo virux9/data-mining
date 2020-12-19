@@ -40,14 +40,26 @@ class Parse5ka:
             yield data.get('results')
 
     def run(self):
-        for products in self.parse(self.start_url):
-            for product in products:
-                self._save_to_file(product)
+        response = requests.get('https://5ka.ru/api/v2/categories/', headers=self._headers)
+
+        for category in response.json():
+            self._params['categories'] = category['parent_group_code']
+
+            mydict = {
+                'parent_group_name': category['parent_group_name'],
+                'parent_group_code': category['parent_group_code'],
+                'products': []
+            }
+
+            for products in self.parse(self.start_url):
+                mydict['products'].extend(products)
+
+            self._save_to_file(mydict)
             time.sleep(0.1)
 
     @staticmethod
     def _save_to_file(product):
-        path = Path(os.path.dirname(__file__)).joinpath('products').joinpath(f'{product["id"]}.json')
+        path = Path(os.path.dirname(__file__)).joinpath('categories').joinpath(f'{product["parent_group_code"]}.json')
         with open(path, 'w', encoding='UTF-8') as file:
             json.dump(product, file, ensure_ascii=False)
 
