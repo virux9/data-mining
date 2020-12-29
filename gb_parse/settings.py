@@ -10,6 +10,7 @@
 BOT_NAME = 'gb_parse'
 LOG_ENABLE = True
 LOG_LEVEL = 'DEBUG'
+LOG_FILE = 'scrapy.log'
 
 SPIDER_MODULES = ['gb_parse.spiders']
 NEWSPIDER_MODULE = 'gb_parse.spiders'
@@ -28,7 +29,7 @@ CONCURRENT_REQUESTS = 8  # 8 64
 # Configure a delay for requests for the same website (default: 0)
 # See https://docs.scrapy.org/en/latest/topics/settings.html#download-delay
 # See also autothrottle settings and docs
-DOWNLOAD_DELAY = 1  # 1 1.2
+DOWNLOAD_DELAY = 1.8  # 1 1.2
 # The download delay setting will honor only one of:
 CONCURRENT_REQUESTS_PER_DOMAIN = 8  # 8 64
 CONCURRENT_REQUESTS_PER_IP = 16
@@ -65,9 +66,9 @@ DEFAULT_REQUEST_HEADERS = {
 
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
-#ITEM_PIPELINES = {
-#    'gb_parse.pipelines.GbParsePipeline': 300,
-#}
+ITEM_PIPELINES = {
+   'gb_parse.pipelines.GbParsePipeline': 300,
+}
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
