@@ -45,38 +45,3 @@ class AutoyoulaSpider(scrapy.Spider):
             loader.add_xpath(name, selector)
 
         yield loader.load_item()
-
-        # data = {
-        #     'title': response.css('.AdvertCard_advertTitle__1S1Ak::text').get(),
-        #     'images': [img.attrib.get('src') for img in response.css('figure.PhotoGallery_photo__36e_r img')],
-        #     'description': response.css('div.AdvertCard_descriptionInner__KnuRi::text').get(),
-        #     'url': response.url,
-        #     'author': self.parse_author(response),
-        #     'specification': self.parse_specification(response),
-        #     'phone': self.parse_phone(response),
-        # }
-        # yield data
-
-    def parse_phone(self, response):
-        result = None
-        enc_phone = re.findall(r"%2C%22phone%22%2C%22(.{34})%3D%3D%22%2C", response.text)
-        if enc_phone:
-            result = base64.b64decode(base64.b64decode(enc_phone[0] + '==')).decode('utf-8')
-
-        return result
-
-    def parse_author(self, response):
-        youla_id = re.findall(r"youlaId%22%2C%22(.{24})%22%2C%22avatar", response.text)
-        return f'https://youla.ru/user/{youla_id[0]}' if youla_id else None
-
-    def parse_specification(self, response):
-        result = []
-        selectors = response.css('.AdvertSpecs_row__ljPcX')
-        for el in selectors:
-            if el.css('.AdvertSpecs_data__xK2Qx a::text').get():
-                val = el.css('.AdvertSpecs_data__xK2Qx a::text').get()
-            else:
-                val = el.css('.AdvertSpecs_data__xK2Qx::text').get()
-            result.append({el.css('.AdvertSpecs_label__2JHnS::text').get(): val})
-
-        return result

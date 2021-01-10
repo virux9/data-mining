@@ -41,3 +41,19 @@ class HeadHunterCompanyItem(scrapy.Item):
     company_description = scrapy.Field()
     company_jobs_page_url = scrapy.Field()
     company_jobs = scrapy.Field()
+
+
+class InstagramTagItem(scrapy.Item):
+    _id = scrapy.Field()
+    instagram_id = scrapy.Field()
+    name = scrapy.Field()
+    picture_url = scrapy.Field()
+    image_info = scrapy.Field()
+
+
+class InstagramPostItem(scrapy.Item):
+    _id = scrapy.Field()
+    data = scrapy.Field()
+    picture_url = scrapy.Field()
+    date_parse = scrapy.Field()
+    image_info = scrapy.Field()
