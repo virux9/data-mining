@@ -6,6 +6,7 @@ import dotenv
 # from gb_parse.spiders.autoyoula import AutoyoulaSpider
 # from gb_parse.spiders.hh import HeadHunterSpider
 from gb_parse.spiders.instagram import InstagramSpider
+# from gb_parse.spiders.zillow import ZillowSpider
 
 # from gb_parse import settings
 
@@ -19,4 +20,5 @@ if __name__ == '__main__':
     # crawl_proc.crawl(HeadHunterSpider)
     # crawl_proc.crawl(AutoyoulaSpider)
     crawl_proc.crawl(InstagramSpider, login=os.getenv('LOGIN'), password=os.getenv('PASSWORD'))
+    # crawl_proc.crawl(ZillowSpider)
     crawl_proc.start()

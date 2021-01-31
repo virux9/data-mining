@@ -14,7 +14,7 @@ from pymongo import MongoClient
 
 class GbParsePipeline:
     def __init__(self):
-        self.db = MongoClient()['parse_gb_11_3']
+        self.db = MongoClient()['parse_gbnew_11_2']
 
     def process_item(self, item, spider):
         collection = self.db[spider.name]
