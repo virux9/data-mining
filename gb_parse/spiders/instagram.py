@@ -1,8 +1,19 @@
+# requirements:
+# 1) pip install anytree
+# 2) scrapy settings: (чтобы паук шел с двух концов)
+#     DEPTH_PRIORITY = 1
+#     SCHEDULER_DISK_QUEUE = 'scrapy.squeues.PickleFifoDiskQueue'
+#     SCHEDULER_MEMORY_QUEUE = 'scrapy.squeues.FifoMemoryQueue'
+
 import scrapy
 import json
+from json import JSONDecodeError
 from datetime import datetime as dt
 from ..items import InstagramTagItem, InstagramPostItem, InstagramUserItem, InstagramUserFollowingItem, \
     InstagramUserFollowedByItem
+from collections import defaultdict
+from anytree import Node, RenderTree, LevelOrderIter, find_by_attr
+from scrapy.exceptions import CloseSpider
 
 
 class InstagramSpider(scrapy.Spider):
@@ -12,17 +23,17 @@ class InstagramSpider(scrapy.Spider):
     start_urls = ['https://www.instagram.com/']
     query_hash = {
         'tag_paginate': '9b498c08113f1e09617a1703c22b2f32',
-        'user_following': 'd04b0a864b4b54837c0d870b0e77e076',
-        'user_followed_by': 'c76146de99bb02f6415203be841dd25a',
+        'edge_follow': 'd04b0a864b4b54837c0d870b0e77e076',
+        'edge_followed_by': 'c76146de99bb02f6415203be841dd25a',
     }
-    tag_list = [
-        'python',
-        'cats',
-    ]
     user_list = [
-        'apple',
-        'burton',
+        # 'apple',
+        # 'burton',
+        'alexandrafomina38',
+        'igor_taryninnn_001',
     ]
+    friends = defaultdict(lambda: defaultdict(set))
+    tree = {0: {}, 1: {}}
 
     def __init__(self, login, password, *args, **kwargs):
         self.login = login
@@ -44,141 +55,114 @@ class InstagramSpider(scrapy.Spider):
             )
         except AttributeError as e:
             if response.json().get('authenticated'):
-                # for tag in self.tag_list:
-                #     yield response.follow(f'/explore/tags/{tag}', callback=self.tag_parse)
-                for user in self.user_list:
-                    yield response.follow(f'/{user}/', callback=self.user_parse)
+                for idx, user in enumerate(self.user_list):
+                    yield response.follow(f'/{user}/', callback=self.user_parse, cb_kwargs={'tree_id': idx})
 
-    def js_data_extract(self, response):
+    @staticmethod
+    def js_data_extract(response):
         script = response.xpath('//script[contains(text(), "window._sharedData = ")]/text()').get()
         return json.loads(script.replace('window._sharedData = ', '')[:-1])
 
-    def user_parse(self, response):
-        data = self.js_data_extract(response)
-        user_data = data['entry_data']['ProfilePage'][0]['graphql']['user']
-        item_user = InstagramUserItem(
-            data=user_data,
-            date_parse=dt.now(),
-        )
-        yield item_user
-
+    @staticmethod
+    def url_get(user_id, query_hash, end_cursor=None):
         url_begin = 'https://www.instagram.com/graphql/query/?'
-        param_query_hash_following = f'query_hash={self.query_hash["user_following"]}'
+        param_query_hash = f'query_hash={query_hash}'
         variables = {
-            'id': user_data['id'],
+            'id': user_id,
             'first': 100,
         }
-        url_following = f'{url_begin}{param_query_hash_following}&variables={json.dumps(variables)}'
-        yield response.follow(url_following, callback=self.following_page_parse, cb_kwargs={'user_data': user_data})
+        if end_cursor is not None:
+            variables['after'] = end_cursor
 
-        param_query_hash_followed_by = f'query_hash={self.query_hash["user_followed_by"]}'
-        url_by = f'{url_begin}{param_query_hash_followed_by}&variables={json.dumps(variables)}'
-        yield response.follow(url_by, callback=self.followed_by_page_parse, cb_kwargs={'user_data': user_data})
+        return f'{url_begin}{param_query_hash}&variables={json.dumps(variables)}'
 
-    def followed_by_page_parse(self, response, user_data):
-        data = response.json()
-        user_id = user_data['id']
-        followed_by_users_data = data['data']['user']['edge_followed_by']['edges']
-        for followed_by_user_data in followed_by_users_data:
-            item_user = InstagramUserItem(
-                data=followed_by_user_data['node'],
-                date_parse=dt.now(),
-            )
-            yield item_user
-            item_user_followed_by = InstagramUserFollowedByItem(
-                user_id=user_id,
-                followed_by_user_id=followed_by_user_data['node']['id'],
-            )
-            yield item_user_followed_by
-
-        page_info = data['data']['user']['edge_followed_by']['page_info']
-        if page_info['has_next_page']:
-            end_cursor = page_info['end_cursor']
-            url_begin = 'https://www.instagram.com/graphql/query/?'
-            param_query_hash = f'query_hash={self.query_hash["user_followed_by"]}'
-            variables = {
-                'id': user_data['id'],
-                'first': 100,
-                'after': end_cursor,
-            }
-            url = f'{url_begin}{param_query_hash}&variables={json.dumps(variables)}'
-
-            yield response.follow(url, callback=self.followed_by_page_parse, cb_kwargs={'user_data': user_data})
-
-    def following_page_parse(self, response, user_data):
-        data = response.json()
-        user_id = user_data['id']
-        following_users_data = data['data']['user']['edge_follow']['edges']
-        for following_user_data in following_users_data:
-            item_user = InstagramUserItem(
-                data=following_user_data['node'],
-                date_parse=dt.now(),
-            )
-            yield item_user
-            item_user_following = InstagramUserFollowingItem(
-                user_id=user_id,
-                following_user_id=following_user_data['node']['id'],
-            )
-            yield item_user_following
-
-        page_info = data['data']['user']['edge_follow']['page_info']
-        if page_info['has_next_page']:
-            end_cursor = page_info['end_cursor']
-            url_begin = 'https://www.instagram.com/graphql/query/?'
-            param_query_hash = f'query_hash={self.query_hash["user_following"]}'
-            variables = {
-                'id': user_data['id'],
-                'first': 100,
-                'after': end_cursor,
-            }
-            url = f'{url_begin}{param_query_hash}&variables={json.dumps(variables)}'
-
-            yield response.follow(url, callback=self.following_page_parse, cb_kwargs={'user_data': user_data})
-
-    def tag_parse(self, response):
-        data = self.js_data_extract(response)
-        graphql = data['entry_data']['TagPage'][0]['graphql']
-
-        hashtag_instagram_id = graphql['hashtag']['id']
-        hashtag_name = graphql['hashtag']['name']
-        hashtag_profile_pic_url = graphql['hashtag']['profile_pic_url']
-        item = InstagramTagItem(
-            instagram_id=hashtag_instagram_id,
-            name=hashtag_name,
-            picture_url=hashtag_profile_pic_url,
-        )
-        yield item
-
-        yield from self.instagram_posts_page_parse(response)
-
-    def instagram_posts_page_parse(self, response):
+    def user_parse(self, response, tree_id):
         try:
             data = self.js_data_extract(response)
-            graphql = data['entry_data']['TagPage'][0]['graphql']
-        except AttributeError as e:
-            data = json.loads(response.text)
-            graphql = data['data']
+        except ValueError:
+            raise CloseSpider('cannot decode json. closing spider')
 
-        hashtag_name = graphql['hashtag']['name']
-        edge_hashtag_to_media = graphql['hashtag']['edge_hashtag_to_media']
-        edges = edge_hashtag_to_media['edges']
-        for el in edges:
-            node = el['node']
-            display_url = node['display_url']
-            item_post = InstagramPostItem(
-                data=node,
-                picture_url=display_url,
-                date_parse=dt.now(),
-            )
-            yield item_post
+        user_data = data['entry_data']['ProfilePage'][0]['graphql']['user']
+        user_id = user_data['id']
 
-        page_info = edge_hashtag_to_media['page_info']
+        self.friends[user_id]['username'] = user_data['username']
+        self.tree[tree_id][user_id] = Node(user_id)
+        self.friends[f'root_node_{tree_id}'] = self.tree[tree_id][user_id]
+
+        yield response.follow(self.url_get(user_id, self.query_hash['edge_follow'], end_cursor=None),
+                              callback=self.get_mutual_friends,
+                              cb_kwargs={'user_id': user_id,
+                                         'follow_type': 'edge_follow',
+                                         'tree_id': tree_id})
+
+        yield response.follow(self.url_get(user_id, self.query_hash['edge_followed_by'], end_cursor=None),
+                              callback=self.get_mutual_friends,
+                              cb_kwargs={'user_id': user_id,
+                                         'follow_type': 'edge_followed_by',
+                                         'tree_id': tree_id})
+
+    def get_mutual_friends(self, response, user_id, follow_type, tree_id):
+        try:
+            data = response.json()
+        except JSONDecodeError:
+            raise CloseSpider('cannot decode json. closing spider')
+
+        self.friends[user_id][f'{follow_type}_count'] = data['data']['user'][follow_type]['count']
+
+        page_info = data['data']['user'][follow_type]['page_info']
         if page_info['has_next_page']:
-            end_cursor = page_info['end_cursor']
-            url_begin = 'https://www.instagram.com/graphql/query/?'
-            param_query_hash = f'query_hash={self.query_hash["tag_paginate"]}'
-            var_tag_name = f'"tag_name"%3A"{hashtag_name}"'
-            var_first = f'"first"%3A100'
-            var_after = f'"after"%3A"{end_cursor}"'
-            url = f'{url_begin}{param_query_hash}&variables=%7B{var_tag_name},{var_first},{var_after}%7D'
-            yield response.follow(url, callback=self.instagram_posts_page_parse)
+            yield response.follow(self.url_get(user_id,
+                                               self.query_hash[follow_type],
+                                               end_cursor=page_info['end_cursor']),
+                                  callback=self.get_mutual_friends,
+                                  cb_kwargs={'user_id': user_id,
+                                             'follow_type': follow_type,
+                                             'tree_id': tree_id})
+
+        for el in data['data']['user'][follow_type]['edges']:
+            self.friends[user_id][follow_type].add(el['node']['id'])
+            self.friends[el['node']['id']]['username'] = el['node']['username']
+
+        # print(self.friends[user_id]['username'], f'tree_id:{tree_id}')
+
+        followed_by_fetched = (len(self.friends[user_id]['edge_followed_by']) ==
+                               self.friends[user_id]['edge_followed_by_count'])
+        follow_fetched = (len(self.friends[user_id]['edge_follow']) ==
+                          self.friends[user_id]['edge_follow_count'])
+        if followed_by_fetched and follow_fetched:
+            mutual_friends = set.intersection(self.friends[user_id]['edge_follow'],
+                                              self.friends[user_id]['edge_followed_by'])
+            for u_id in mutual_friends:
+                if u_id not in self.tree[tree_id].keys():
+                    self.tree[tree_id][u_id] = Node(u_id, parent=self.tree[tree_id][user_id])
+                    self.find_user()
+                    yield response.follow(self.url_get(u_id, self.query_hash['edge_follow'], end_cursor=None),
+                                          callback=self.get_mutual_friends,
+                                          cb_kwargs={'user_id': u_id,
+                                                     'follow_type': 'edge_follow',
+                                                     'tree_id': tree_id})
+
+                    yield response.follow(self.url_get(u_id, self.query_hash['edge_followed_by'], end_cursor=None),
+                                          callback=self.get_mutual_friends,
+                                          cb_kwargs={'user_id': u_id,
+                                                     'follow_type': 'edge_followed_by',
+                                                     'tree_id': tree_id})
+
+    def find_user(self):
+        for node in LevelOrderIter(self.friends['root_node_0']):
+            tree_1_node = find_by_attr(self.friends['root_node_1'], node.name)
+            if tree_1_node is not None:
+                part_0 = [inode.name for inode in node.path]
+                part_1 = [inode.name for inode in self.tree[1][tree_1_node.name].iter_path_reverse() if
+                          inode.name != node.name]
+                id_path = part_0 + part_1
+                print('Found!')
+                print('ID path:')
+                print('->'.join([uid for uid in id_path]))
+                print('username path:')
+                print(' -> '.join([str(self.friends[uid]['username']) for uid in id_path]))
+                print(f'link length: {len(id_path)}')
+                raise CloseSpider('closing spider')
+
+    def print_tree(self, tree_id):
+        print(RenderTree(self.friends[f'root_node_{tree_id}']))
